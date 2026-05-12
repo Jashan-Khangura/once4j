@@ -1,1 +1,2 @@
 com.java.once4j.configuration.ApplicationConfiguration
+com.java.once4j.configuration.RedisStoreConfiguration

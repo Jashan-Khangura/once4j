@@ -1,8 +1,13 @@
 package com.java.once4j.aspect;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.java.once4j.annotation.Idempotent;
+import com.java.once4j.dto.IdempotentRecord;
 import com.java.once4j.store.IdempotentStore;
-import custom.exceptions.DuplicateRequestException;
+import custom.exceptions.FailedMarshallingException;
+import custom.exceptions.IdempotentRequestException;
+import custom.exceptions.PayloadMismatchException;
 import custom.serialize.CustomIdempotentSerializer;
 import org.aspectj.lang.ProceedingJoinPoint;
 import org.aspectj.lang.annotation.Around;
@@ -13,21 +18,24 @@ import org.springframework.core.ParameterNameDiscoverer;
 import org.springframework.expression.ExpressionParser;
 import org.springframework.expression.spel.standard.SpelExpressionParser;
 import org.springframework.expression.spel.support.StandardEvaluationContext;
-import org.springframework.stereotype.Component;
 
 import java.lang.reflect.Method;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 
 @Aspect
-@Component
 public class IdempotentAspect {
     private final ExpressionParser parser = new SpelExpressionParser();
     private final ParameterNameDiscoverer discoverer = new DefaultParameterNameDiscoverer();
     private final IdempotentStore store;
     private final CustomIdempotentSerializer serializer;
+    private final ObjectMapper mapper;
 
-    public IdempotentAspect(IdempotentStore store, CustomIdempotentSerializer serializer) {
+    public IdempotentAspect(IdempotentStore store, CustomIdempotentSerializer serializer, ObjectMapper mapper) {
         this.store = store;
         this.serializer = serializer;
+        this.mapper = mapper;
     }
 
     @Around("@annotation(com.java.once4j.annotation.Idempotent)")
@@ -43,26 +51,57 @@ public class IdempotentAspect {
         long responseTTL = annotation.responseTTL();
         long executionTTL = annotation.execLockTimeout();
         String key = parseKey(keyExpression, method, point.getArgs());
+        boolean validatePayload = annotation.validatePayload();
 
-        if (!store.tryLock(key, executionTTL)) {
-            throw new DuplicateRequestException("Request in progress");
+        if(!store.tryLock(key, executionTTL)) {
+            String cachedResponse = store.waitForResult(key, executionTTL);
+            if(cachedResponse == null)
+                throw new IdempotentRequestException("In-progress request failed or timed out for key : " + key);
+            return prepareResponse(cachedResponse, validatePayload, point.getArgs(), returnType, key);
         }
 
+        Object result;
         try {
-            //Check Cache if response present
-            String cachedResponse = store.get(key);
-            if(cachedResponse != null)
-                return serializer.deserialize(cachedResponse, returnType);
-            Object result = point.proceed();
-
-            //Cache result and return
-            store.save(key, serializer.serialize(result), responseTTL);
-            return result;
+            result = point.proceed();
         } catch (Throwable t) {
             store.delete(key);
             throw t;
         }
 
+        String hash = validatePayload ? hashArgs(point.getArgs()) : null;
+        store.save(key, mapper.writeValueAsString(new IdempotentRecord(hash,
+                serializer.serialize(result))), responseTTL);
+
+        return result;
+    }
+
+    private Object prepareResponse(String cachedResponse, boolean validatePayload, Object[] args,
+                                   Class<?> returnType, String key) throws JsonProcessingException {
+        IdempotentRecord record = mapper.readValue(cachedResponse, IdempotentRecord.class);
+        if(validatePayload) {
+            String requestHash = hashArgs(args);
+            if(!requestHash.equals(record.payloadHash())) {
+                throw new PayloadMismatchException("Idempotency key " + key + " was already used with a different payload");
+            }
+        }
+        return serializer.deserialize(record.responseString(), returnType);
+    }
+
+    private String hashArgs(Object[] args) {
+        try{
+            String json = mapper.writeValueAsString(args);
+            MessageDigest digest = MessageDigest.getInstance("SHA-256");
+            byte[] bytes = digest.digest(json.getBytes(StandardCharsets.UTF_8));
+            StringBuilder hex = new StringBuilder();
+            for (byte b : bytes) {
+                hex.append(String.format("%02x", b));
+            }
+            return hex.toString();
+        } catch (NoSuchAlgorithmException e) {
+            throw new IllegalStateException("SHA-256 not available", e);
+        } catch (Exception e) {
+            throw new FailedMarshallingException("Failed to hash request payload", e);
+        }
     }
 
     private String parseKey(String expression, Method method, Object[] args) {

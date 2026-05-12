@@ -2,17 +2,13 @@ package custom.serialize;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.SerializationFeature;
-import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import custom.exceptions.FailedMarshallingException;
 
 public class JSONIdempotentSerializer implements CustomIdempotentSerializer{
     private final ObjectMapper mapper;
 
     public JSONIdempotentSerializer(ObjectMapper mapper) {
-        this.mapper = mapper.registerModule(new JavaTimeModule())
-                .disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS)
-                .disable(SerializationFeature.FAIL_ON_EMPTY_BEANS);;
+        this.mapper = mapper;
     }
 
     @Override

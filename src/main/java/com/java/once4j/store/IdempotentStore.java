@@ -21,4 +21,10 @@ public interface IdempotentStore {
      * Deletes the key (e.g., if the business logic failed and you want to allow a retry).
      */
     Boolean delete(String key);
+
+    /**
+     * Blocks until the in-progress request for this key completes or the timeout elapses.
+     * Returns the cached JSON result if the request succeeded, or null if it failed/timed out.
+     */
+    String waitForResult(String key, long timeoutMillis);
 }

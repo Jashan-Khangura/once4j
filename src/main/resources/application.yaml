@@ -1,5 +1,3 @@
 spring:
   application:
     name: once4j
-settings:
-  mode: local
