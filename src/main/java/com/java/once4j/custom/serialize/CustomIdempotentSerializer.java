@@ -1,4 +1,4 @@
-package custom.serialize;
+package com.java.once4j.custom.serialize;
 
 public interface CustomIdempotentSerializer {
     String serialize(Object result);

@@ -1,8 +1,8 @@
-package custom.serialize;
+package com.java.once4j.custom.serialize;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import custom.exceptions.FailedMarshallingException;
+import com.java.once4j.custom.exceptions.FailedMarshallingException;
 
 public class JSONIdempotentSerializer implements CustomIdempotentSerializer{
     private final ObjectMapper mapper;

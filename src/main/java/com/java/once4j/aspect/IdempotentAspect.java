@@ -5,10 +5,10 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.java.once4j.annotation.Idempotent;
 import com.java.once4j.dto.IdempotentRecord;
 import com.java.once4j.store.IdempotentStore;
-import custom.exceptions.FailedMarshallingException;
-import custom.exceptions.IdempotentRequestException;
-import custom.exceptions.PayloadMismatchException;
-import custom.serialize.CustomIdempotentSerializer;
+import com.java.once4j.custom.exceptions.FailedMarshallingException;
+import com.java.once4j.custom.exceptions.IdempotentRequestException;
+import com.java.once4j.custom.exceptions.PayloadMismatchException;
+import com.java.once4j.custom.serialize.CustomIdempotentSerializer;
 import org.aspectj.lang.ProceedingJoinPoint;
 import org.aspectj.lang.annotation.Around;
 import org.aspectj.lang.annotation.Aspect;
@@ -56,7 +56,7 @@ public class IdempotentAspect {
         if(!store.tryLock(key, executionTTL)) {
             String cachedResponse = store.waitForResult(key, executionTTL);
             if(cachedResponse == null)
-                throw new IdempotentRequestException("In-progress request failed or timed out for key : " + key);
+                throw new IdempotentRequestException("In-flight request failed or timed out for key : " + key);
             return prepareResponse(cachedResponse, validatePayload, point.getArgs(), returnType, key);
         }
 

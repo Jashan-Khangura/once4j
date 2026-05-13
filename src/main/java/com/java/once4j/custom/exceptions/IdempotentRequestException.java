@@ -1,4 +1,4 @@
-package custom.exceptions;
+package com.java.once4j.custom.exceptions;
 
 public class IdempotentRequestException extends RuntimeException{
     public IdempotentRequestException(String message) {
